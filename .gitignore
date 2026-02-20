@@ -1,0 +1,34 @@
+# Ambiente virtual
+venv/
+.venv/
+env/
+
+# Arquivos de sessao do Telegram (contem dados de login!)
+*.session
+*.session-journal
+
+# Variaveis de ambiente (contem suas credenciais!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.gemini/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flet
+.flet/
