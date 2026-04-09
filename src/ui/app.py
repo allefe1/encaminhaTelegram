@@ -68,20 +68,7 @@ class DarkoGramApp:
             self.show_error(f"Erro ao carregar canais: {str(e)}")
 
     def update_channel_dropdowns(self):
-        """Atualiza os dropdowns com os canais carregados."""
-        options = [
-            ft.dropdown.Option(
-                key=str(c["id"]),
-                text=f"{c['title']} ({c['type']})",
-            )
-            for c in self.channels
-        ]
-
-        if hasattr(self, "source_dd") and self.source_dd:
-            self.source_dd.options = options
-        if hasattr(self, "dest_dd") and self.dest_dd:
-            self.dest_dd.options = list(options)
-
+        """Atualiza os botoes de selecao com os canais carregados."""
         # Atualiza o card de estatisticas
         if hasattr(self, "channels_stat") and self.channels_stat:
             self.channels_stat.content.controls[1].controls[0].value = str(len(self.channels))
@@ -90,6 +77,87 @@ class DarkoGramApp:
         if hasattr(self, "channels_loading_text") and self.channels_loading_text:
             self.channels_loading_text.visible = False
 
+        self.page.update()
+
+    def _open_channel_picker(self, target):
+        """Abre um painel de selecao de canal com busca."""
+        # Reutilizar BottomSheet se ja existir
+        bs_attr = f"_bs_{target}"
+        existing_bs = getattr(self, bs_attr, None)
+
+        def on_select(e):
+            data = e.control.data
+            if target == "source":
+                self.source_channel = data["id"]
+                self.source_btn_text.value = data["display"]
+            else:
+                self.dest_channel = data["id"]
+                self.dest_btn_text.value = data["display"]
+            bs.open = False
+            self.page.update()
+
+        # Pre-construir tiles uma vez so
+        all_tiles = []
+        for c in self.channels:
+            display = f"{c['title']} ({c['type']})"
+            all_tiles.append(
+                ft.ListTile(
+                    leading=ft.Icon(icons.CHAT_ROUNDED, color=PRIMARY_ACCENT, size=20),
+                    title=ft.Text(display, color=WHITE, size=13),
+                    data={"id": str(c["id"]), "display": display, "title_lower": c["title"].lower()},
+                    on_click=on_select,
+                    bgcolor=SURFACE_COLOR,
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                )
+            )
+
+        channel_list = ft.ListView(controls=all_tiles, spacing=2, height=300, auto_scroll=False)
+
+        def filter_list(search_text=""):
+            search = search_text.strip().lower()
+            for tile in all_tiles:
+                tile.visible = (not search) or (search in tile.data["title_lower"])
+            channel_list.update()
+
+        def on_search(e):
+            filter_list(e.control.value or "")
+
+        label = "Canal de Origem" if target == "source" else "Canal de Destino"
+
+        search_tf = ft.TextField(
+            label="Buscar canal...",
+            prefix_icon=icons.SEARCH_ROUNDED,
+            on_change=on_search,
+            bgcolor="#1a1a2e",
+            color=WHITE,
+            border_radius=10,
+            border_color=PRIMARY_ACCENT,
+            autofocus=True,
+        )
+
+        bs = ft.BottomSheet(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text(label, size=18, weight=ft.FontWeight.BOLD, color=WHITE),
+                    ft.Container(height=8),
+                    search_tf,
+                    ft.Container(height=8),
+                    channel_list,
+                ]),
+                padding=20,
+                bgcolor=BG_COLOR,
+                border_radius=ft.border_radius.only(top_left=20, top_right=20),
+                width=500,
+            ),
+        )
+
+        # Limpar BottomSheet antigo do overlay se existir
+        if existing_bs and existing_bs in self.page.overlay:
+            self.page.overlay.remove(existing_bs)
+
+        setattr(self, bs_attr, bs)
+        self.page.overlay.append(bs)
+        bs.open = True
         self.page.update()
 
     def show_loading(self, mensagem):
@@ -158,31 +226,28 @@ class DarkoGramApp:
 
         # --- Conteudo Principal ---
 
-        self.source_dd = ft.Dropdown(
-            text="Canal de Origem",
-            width=350,
-            options=[],
-            on_select=self.on_source_change,
-            enable_filter=True,
-            enable_search=True,
-            bgcolor=SURFACE_COLOR,
-            color=WHITE,
-            border_radius=10,
-            border_color=PRIMARY_ACCENT,
-        )
+        def make_channel_button(label, target):
+            """Cria um botao estilizado para selecionar canal."""
+            text_ref = ft.Text(label, color=SECONDARY_TEXT, size=13, italic=True)
+            return text_ref, ft.Container(
+                content=ft.Row([
+                    ft.Icon(icons.SEARCH_ROUNDED, color=SECONDARY_TEXT, size=18),
+                    text_ref,
+                    ft.Container(expand=True),
+                    ft.Icon(icons.ARROW_DROP_DOWN_ROUNDED, color=SECONDARY_TEXT, size=20),
+                ], spacing=8),
+                width=350,
+                height=50,
+                bgcolor=SURFACE_COLOR,
+                border_radius=10,
+                border=ft.border.all(1, PRIMARY_ACCENT),
+                padding=ft.padding.symmetric(horizontal=12),
+                on_click=lambda _: self._open_channel_picker(target),
+                ink=True,
+            )
 
-        self.dest_dd = ft.Dropdown(
-            text="Canal de Destino",
-            width=350,
-            options=[],
-            on_select=self.on_dest_change,
-            enable_filter=True,
-            enable_search=True,
-            bgcolor=SURFACE_COLOR,
-            color=WHITE,
-            border_radius=10,
-            border_color=PRIMARY_ACCENT,
-        )
+        self.source_btn_text, source_btn = make_channel_button("Canal de Origem", "source")
+        self.dest_btn_text, dest_btn = make_channel_button("Canal de Destino", "dest")
 
         self.channels_loading_text = ft.Row([
             ft.ProgressRing(width=16, height=16, color=PRIMARY_ACCENT, stroke_width=2),
@@ -237,9 +302,9 @@ class DarkoGramApp:
                             ft.Container(height=10),
                             ft.Row(
                                 [
-                                    self.source_dd,
+                                    source_btn,
                                     ft.Icon(icons.ARROW_FORWARD_ROUNDED, color=SECONDARY_TEXT, size=20),
-                                    self.dest_dd,
+                                    dest_btn,
                                 ],
                                 alignment=ft.MainAxisAlignment.CENTER,
                                 spacing=15,
@@ -281,11 +346,6 @@ class DarkoGramApp:
         self.page.add(layout)
         self.page.update()
 
-    def on_source_change(self, e):
-        self.source_channel = e.control.value
-
-    def on_dest_change(self, e):
-        self.dest_channel = e.control.value
 
     def show_error(self, mensagem):
         self.page.snack_bar = ft.SnackBar(
